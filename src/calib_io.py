@@ -182,21 +182,27 @@ def load_calibrations(
         entry = _resolve_camera_entry(data, cam_id)
         extr_entry = _resolve_camera_entry(extr_data, cam_id, strict=False)
 
-        if cam_id in required_extrinsics_ids and extr_entry is None and (
-            "rotation" not in entry or "translation" not in entry
-        ):
+        entry_has_rt = "rotation" in entry and "translation" in entry
+        extr_has_rt = extr_entry is not None and "rotation" in extr_entry and "translation" in extr_entry
+
+        if cam_id in required_extrinsics_ids and not entry_has_rt and not extr_has_rt:
             raise KeyError(
                 f"Camera id {cam_id} is required in extrinsics but not found. "
                 "Please ensure extrinsic.json/extrinsics.json contains this camera."
             )
 
         K, dist, size = _extract_intrinsics(entry, cam_id)
-        T_w_c = _extract_twc(
-            entry,
-            cam_id,
-            use_mm_to_m_auto_scale,
-            fixed_extrinsics_are_twc,
-            extr_entry=extr_entry,
-        )
+        if entry_has_rt or extr_has_rt:
+            T_w_c = _extract_twc(
+                entry,
+                cam_id,
+                use_mm_to_m_auto_scale,
+                fixed_extrinsics_are_twc,
+                extr_entry=extr_entry,
+            )
+        else:
+            # For target camera without known world extrinsics, use identity placeholder.
+            T_w_c = np.eye(4, dtype=np.float64)
+
         out[cam_id] = CameraCalibration(camera_id=cam_id, K=K, dist=dist, T_w_c=T_w_c, image_size=size)
     return calib_json_path, out
