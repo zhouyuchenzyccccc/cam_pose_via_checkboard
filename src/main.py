@@ -32,6 +32,7 @@ def main() -> None:
     calib_json, calibrations = load_calibrations(
         dataset_root=args.dataset_root,
         camera_ids=sorted(camera_ids),
+        required_extrinsics_ids=cfg.fixed_camera_ids,
         calibration_filename=cfg.calibration_filename,
         extrinsics_filename=cfg.extrinsics_filename,
         use_mm_to_m_auto_scale=cfg.use_mm_to_m_auto_scale,

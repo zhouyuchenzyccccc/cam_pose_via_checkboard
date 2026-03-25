@@ -129,8 +129,13 @@ def _extract_twc(
     return invert_transform(T)
 
 
-def _resolve_camera_entry(data: dict, cam_id: str) -> dict:
+def _resolve_camera_entry(data: dict | None, cam_id: str, strict: bool = True) -> dict | None:
     """Resolve camera key robustly for ids like 07/7."""
+    if data is None:
+        if strict:
+            raise KeyError(f"Camera id {cam_id} not found in calibration json")
+        return None
+
     if cam_id in data:
         return data[cam_id]
 
@@ -147,12 +152,15 @@ def _resolve_camera_entry(data: dict, cam_id: str) -> dict:
         if key in data:
             return data[key]
 
-    raise KeyError(f"Camera id {cam_id} not found in calibration json")
+    if strict:
+        raise KeyError(f"Camera id {cam_id} not found in calibration json")
+    return None
 
 
 def load_calibrations(
     dataset_root: Path,
     camera_ids: Iterable[str],
+    required_extrinsics_ids: Iterable[str],
     calibration_filename: str,
     extrinsics_filename: str,
     use_mm_to_m_auto_scale: bool,
@@ -169,9 +177,19 @@ def load_calibrations(
             extr_data = json.load(f)
 
     out: Dict[str, CameraCalibration] = {}
+    required_extrinsics_ids = set(required_extrinsics_ids)
     for cam_id in camera_ids:
         entry = _resolve_camera_entry(data, cam_id)
-        extr_entry = _resolve_camera_entry(extr_data, cam_id) if extr_data is not None else None
+        extr_entry = _resolve_camera_entry(extr_data, cam_id, strict=False)
+
+        if cam_id in required_extrinsics_ids and extr_entry is None and (
+            "rotation" not in entry or "translation" not in entry
+        ):
+            raise KeyError(
+                f"Camera id {cam_id} is required in extrinsics but not found. "
+                "Please ensure extrinsic.json/extrinsics.json contains this camera."
+            )
+
         K, dist, size = _extract_intrinsics(entry, cam_id)
         T_w_c = _extract_twc(
             entry,

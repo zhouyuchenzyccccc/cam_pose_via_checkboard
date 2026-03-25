@@ -24,6 +24,8 @@
 - `extrinsics.json/extrinsic.json` 中的 `[cam_id].rotation` 与 `[cam_id].translation`
 - 若内参文件本身也包含 `rotation/translation`，同样可直接使用
 
+注意：默认只要求固定相机 `00~05` 在外参文件中存在，目标相机 `07` 可以不在外参文件里。
+
 ## 输出
 
 默认输出到 `outputs/`：
