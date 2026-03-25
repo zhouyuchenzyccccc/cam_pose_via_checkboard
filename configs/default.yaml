@@ -26,3 +26,4 @@ fusion_ransac_rot_thresh_deg: 8.0
 
 output_subdir: "outputs"
 calibration_filename: "camera_params.json"
+extrinsics_filename: "extrinsics.json"

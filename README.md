@@ -6,7 +6,8 @@
 
 只需要传入 `dataset_root`。程序会自动读取：
 
-- 参数文件：优先 `${dataset_root}/camera_params.json`，若不存在会在根目录搜索 `*camera*params*.json`
+- 内参文件：优先 `${dataset_root}/camera_params.json`，若不存在会搜索 `*camera*params*.json` 与 `*camera*parms*.json`
+- 外参文件：优先 `${dataset_root}/extrinsics.json`，若不存在会自动尝试 `${dataset_root}/extrinsic.json` 或搜索 `*extrinsic*.json`
 - 图像目录：`${dataset_root}/{cam_id}/RGB/{frame_index}.jpg`
 
 其中 `cam_id` 默认使用：固定相机 `00~05` + 目标相机 `07`。
@@ -15,9 +16,13 @@
 
 从 `camera_params.json` 中读取：
 
-- 外参：`[cam_id].rotation`、`[cam_id].translation`
 - RGB内参：`[cam_id].RGB.intrinsic.{fx,fy,cx,cy,width,height}`
 - RGB畸变：`[cam_id].RGB.distortion.{k1,k2,p1,p2,k3}`
+
+外参优先读取：
+
+- `extrinsics.json/extrinsic.json` 中的 `[cam_id].rotation` 与 `[cam_id].translation`
+- 若内参文件本身也包含 `rotation/translation`，同样可直接使用
 
 ## 输出
 

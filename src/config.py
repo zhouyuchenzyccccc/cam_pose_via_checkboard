@@ -25,6 +25,7 @@ class RuntimeConfig:
     fusion_ransac_rot_thresh_deg: float = 8.0
     output_subdir: str = "outputs"
     calibration_filename: str = "camera_params.json"
+    extrinsics_filename: str = "extrinsics.json"
 
 
 def _merge_default(default: RuntimeConfig, data: Dict[str, Any]) -> RuntimeConfig:

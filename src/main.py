@@ -33,6 +33,7 @@ def main() -> None:
         dataset_root=args.dataset_root,
         camera_ids=sorted(camera_ids),
         calibration_filename=cfg.calibration_filename,
+        extrinsics_filename=cfg.extrinsics_filename,
         use_mm_to_m_auto_scale=cfg.use_mm_to_m_auto_scale,
         fixed_extrinsics_are_twc=cfg.fixed_extrinsics_are_twc,
     )

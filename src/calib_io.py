@@ -24,13 +24,47 @@ def _find_calib_json(dataset_root: Path, preferred_name: str) -> Path:
     if candidate.exists():
         return candidate
 
-    matches = sorted(dataset_root.glob("*camera*params*.json"))
+    matches = []
+    matches.extend(sorted(dataset_root.glob("*camera*params*.json")))
+    matches.extend(sorted(dataset_root.glob("*camera*parms*.json")))
+    # Remove obvious extrinsic files if the wildcard accidentally matches them.
+    matches = [p for p in matches if "extrinsic" not in p.name.lower()]
+    # De-duplicate while preserving order.
+    seen = set()
+    dedup = []
+    for p in matches:
+        sp = str(p)
+        if sp not in seen:
+            seen.add(sp)
+            dedup.append(p)
+    matches = dedup
+
     if len(matches) == 1:
         return matches[0]
     if len(matches) > 1:
         names = "\n".join(str(p) for p in matches)
         raise FileNotFoundError(f"Multiple candidate calibration json files found:\n{names}")
     raise FileNotFoundError(f"No calibration json found under {dataset_root}")
+
+
+def _find_extrinsics_json(dataset_root: Path, preferred_name: str) -> Path | None:
+    candidate = dataset_root / preferred_name
+    if candidate.exists():
+        return candidate
+
+    # Also try common singular/plural names directly.
+    common = [dataset_root / "extrinsic.json", dataset_root / "extrinsics.json"]
+    for p in common:
+        if p.exists():
+            return p
+
+    matches = sorted(dataset_root.glob("*extrinsic*.json"))
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        names = "\n".join(str(p) for p in matches)
+        raise FileNotFoundError(f"Multiple candidate extrinsics json files found:\n{names}")
+    return None
 
 
 def _extract_intrinsics(entry: dict, camera_id: str) -> tuple[np.ndarray, np.ndarray, tuple[int, int]]:
@@ -63,12 +97,25 @@ def _extract_intrinsics(entry: dict, camera_id: str) -> tuple[np.ndarray, np.nda
     return K, dist_vec, (width, height)
 
 
-def _extract_twc(entry: dict, camera_id: str, use_mm_to_m_auto_scale: bool, extrinsics_are_twc: bool) -> np.ndarray:
-    if "rotation" not in entry or "translation" not in entry:
-        raise KeyError(f"Missing rotation/translation for camera {camera_id}")
+def _extract_twc(
+    entry: dict,
+    camera_id: str,
+    use_mm_to_m_auto_scale: bool,
+    extrinsics_are_twc: bool,
+    extr_entry: dict | None = None,
+) -> np.ndarray:
+    source = entry
+    if "rotation" not in source or "translation" not in source:
+        if extr_entry is not None and "rotation" in extr_entry and "translation" in extr_entry:
+            source = extr_entry
+        else:
+            raise KeyError(
+                f"Missing rotation/translation for camera {camera_id}. "
+                "Please provide extrinsic.json/extrinsics.json with per-camera rotation/translation."
+            )
 
-    R = np.array(entry["rotation"], dtype=np.float64).reshape(3, 3)
-    t = np.array(entry["translation"], dtype=np.float64).reshape(3)
+    R = np.array(source["rotation"], dtype=np.float64).reshape(3, 3)
+    t = np.array(source["translation"], dtype=np.float64).reshape(3)
 
     if use_mm_to_m_auto_scale and np.linalg.norm(t) > 10.0:
         t = t / 1000.0
@@ -107,6 +154,7 @@ def load_calibrations(
     dataset_root: Path,
     camera_ids: Iterable[str],
     calibration_filename: str,
+    extrinsics_filename: str,
     use_mm_to_m_auto_scale: bool,
     fixed_extrinsics_are_twc: bool,
 ) -> tuple[Path, Dict[str, CameraCalibration]]:
@@ -114,10 +162,23 @@ def load_calibrations(
     with calib_json_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
+    extr_json_path = _find_extrinsics_json(dataset_root, extrinsics_filename)
+    extr_data = None
+    if extr_json_path is not None:
+        with extr_json_path.open("r", encoding="utf-8") as f:
+            extr_data = json.load(f)
+
     out: Dict[str, CameraCalibration] = {}
     for cam_id in camera_ids:
         entry = _resolve_camera_entry(data, cam_id)
+        extr_entry = _resolve_camera_entry(extr_data, cam_id) if extr_data is not None else None
         K, dist, size = _extract_intrinsics(entry, cam_id)
-        T_w_c = _extract_twc(entry, cam_id, use_mm_to_m_auto_scale, fixed_extrinsics_are_twc)
+        T_w_c = _extract_twc(
+            entry,
+            cam_id,
+            use_mm_to_m_auto_scale,
+            fixed_extrinsics_are_twc,
+            extr_entry=extr_entry,
+        )
         out[cam_id] = CameraCalibration(camera_id=cam_id, K=K, dist=dist, T_w_c=T_w_c, image_size=size)
     return calib_json_path, out
