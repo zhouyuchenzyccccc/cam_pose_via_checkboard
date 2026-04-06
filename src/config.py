@@ -9,9 +9,14 @@ import yaml
 
 @dataclass
 class RuntimeConfig:
+    target_type: str = "chessboard"  # chessboard | apriltag
     board_cols: int = 9
     board_rows: int = 6
     square_size_m: float = 0.0255
+    apriltag_family: str = "tag36h11"  # tag16h5 | tag25h9 | tag36h10 | tag36h11
+    apriltag_min_tags: int = 1
+    apriltag_min_inliers: int = 4
+    apriltag_default_size_m: float = 0.10
     fixed_camera_ids: tuple[str, ...] = ("00", "01", "02", "03", "04", "05")
     target_camera_id: str = "07"
     frame_policy: str = "intersection"  # intersection | target_primary

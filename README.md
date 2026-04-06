@@ -64,3 +64,104 @@ chmod +x scripts/run_example.sh
 - 角点检测失败较多：优先检查棋盘是否完整可见、运动模糊、曝光。
 - 位姿尺度异常：确认外参 `translation` 单位，必要时启用 `use_mm_to_m_auto_scale`。
 - 姿态方向看起来翻转：尝试切换 `fixed_extrinsics_are_twc`（外参方向可能与配置不一致）。
+
+## AprilTag Workflow (Auto, no pre-defined world map)
+
+This project now supports `target_type: apriltag`.
+In this mode, you do **not** need to pre-fill each tag's world pose in a config file.
+The world pose of each visible AprilTag is estimated automatically from fixed cameras per frame.
+
+### 1) Config example
+
+Edit `configs/default.yaml`:
+
+```yaml
+target_type: "apriltag"
+apriltag_family: "tag36h11"   # tag16h5 | tag25h9 | tag36h10 | tag36h11
+apriltag_default_size_m: 0.10   # physical tag size (meter)
+apriltag_min_tags: 1
+apriltag_min_inliers: 4
+```
+
+Notes:
+
+- `apriltag_default_size_m` must match your real printed tag size.
+- Current implementation assumes all tags use the same size.
+
+### 2) Pipeline logic (per frame)
+
+1. For each fixed camera (`00~05`), detect visible AprilTags.
+2. For each detected tag, solve single-tag PnP in camera frame (`T_c_tag`).
+3. Convert to world frame using fixed-camera extrinsic (`T_w_tag = T_w_c_fixed * T_c_tag`).
+4. If one tag is seen by multiple fixed cameras, fuse those `T_w_tag` candidates.
+5. Build this frame's world-tag map from fused tags.
+6. For target camera (`07`), detect AprilTags and run joint PnP using:
+   - image points from camera-07,
+   - world 3D corners from this frame's world-tag map.
+7. Invert the result to output `T_w_c07`.
+
+### 3) Run
+
+```bash
+python -m src.main --dataset_root <your_dataset_root> --config configs/default.yaml
+```
+
+### 4) Failure reasons in diagnostics.csv
+
+Common reasons for AprilTag mode:
+
+- `insufficient_fixed_observations`: too few fixed cameras with valid detections.
+- `insufficient_world_tags`: fixed-camera fusion did not produce enough world tags.
+- `target_failed:tags_not_found`: target camera cannot detect tags in that frame.
+- `target_failed:few_tags`: target camera sees fewer tags than `apriltag_min_tags`.
+- `fixed_failed:opencv_has_no_aruco`: OpenCV build lacks `aruco` (install `opencv-contrib-python`).
+
+## AprilTag 使用说明（自动建图，无需预设世界坐标）
+
+当前已支持 `target_type: apriltag`。
+在该模式下，不需要手工预先填写每个 tag 的世界坐标与位姿。
+系统会在每一帧中基于固定相机自动估计可见 AprilTag 的世界位姿。
+
+### 1）配置示例
+
+请在 `configs/default.yaml` 中设置：
+
+```yaml
+target_type: "apriltag"
+apriltag_family: "tag36h11"   # tag16h5 | tag25h9 | tag36h10 | tag36h11
+apriltag_default_size_m: 0.10   # 标签物理边长（米）
+apriltag_min_tags: 1
+apriltag_min_inliers: 4
+```
+
+说明：
+
+- `apriltag_default_size_m` 必须与实际打印标签尺寸一致，否则尺度会不准。
+- 当前实现默认所有 tag 尺寸一致。
+
+### 2）每帧处理流程
+
+1. 对每台固定相机（`00~05`）检测当前帧可见的 AprilTag。
+2. 对每个检测到的 tag 做单 tag PnP，得到相机系下 `T_c_tag`。
+3. 结合固定相机外参，转换到世界系：`T_w_tag = T_w_c_fixed * T_c_tag`。
+4. 若同一 tag 被多台固定相机同时看到，对该 tag 的多个 `T_w_tag` 候选进行融合。
+5. 得到该帧的 world-tag map（本帧可用 tag 的世界坐标与位姿）。
+6. 对头戴相机（`07`）检测 AprilTag，并使用：
+   - 头戴相机图像上的 tag 角点（2D）
+   - 本帧 world-tag map 的对应 3D 角点
+   做联合 PnP。
+7. 对结果取逆，得到头戴相机在世界系下位姿 `T_w_c07`。
+
+### 3）运行命令
+
+```bash
+python -m src.main --dataset_root <your_dataset_root> --config configs/default.yaml
+```
+
+### 4）diagnostics.csv 常见失败原因
+
+- `insufficient_fixed_observations`：可用固定相机数量不足。
+- `insufficient_world_tags`：固定相机融合后可用于建图的 tag 数不足。
+- `target_failed:tags_not_found`：头戴相机该帧未检测到 tag。
+- `target_failed:few_tags`：头戴相机该帧可用 tag 数小于 `apriltag_min_tags`。
+- `fixed_failed:opencv_has_no_aruco`：OpenCV 不含 `aruco` 模块（请安装 `opencv-contrib-python`）。

@@ -11,7 +11,7 @@ from .pipeline import run_pipeline
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Estimate camera-07 T_w_c from chessboard observations")
+    parser = argparse.ArgumentParser(description="Estimate camera-07 T_w_c from chessboard/AprilTag observations")
     parser.add_argument("--dataset_root", type=Path, required=True, help="Dataset root path")
     parser.add_argument("--config", type=Path, default=Path("configs/default.yaml"), help="Config yaml path")
     parser.add_argument("--log_level", type=str, default="INFO", help="Logging level")

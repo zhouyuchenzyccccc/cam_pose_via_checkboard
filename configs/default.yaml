@@ -1,6 +1,12 @@
+target_type: "chessboard"  # chessboard | apriltag
+
 board_cols: 9
 board_rows: 6
 square_size_m: 0.0255
+apriltag_family: "tag36h11"
+apriltag_min_tags: 1
+apriltag_min_inliers: 4
+apriltag_default_size_m: 0.10
 
 fixed_camera_ids:
   - "00"
