@@ -15,6 +15,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset_root", type=Path, required=True, help="Dataset root path")
     parser.add_argument("--config", type=Path, default=Path("configs/default.yaml"), help="Config yaml path")
     parser.add_argument("--log_level", type=str, default="INFO", help="Logging level")
+    parser.add_argument("--output_dir", type=Path, default=None, help="Output directory (overrides config output_subdir)")
     return parser.parse_args()
 
 
@@ -42,7 +43,10 @@ def main() -> None:
 
     rows = run_pipeline(args.dataset_root, cfg, calibrations)
 
-    output_root = Path(cfg.output_subdir)
+    if args.output_dir is not None:
+        output_root = args.output_dir
+    else:
+        output_root = Path(cfg.output_subdir)
     if not output_root.is_absolute():
         output_root = Path.cwd() / output_root
 
