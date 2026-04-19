@@ -174,12 +174,18 @@ def solve_single_tag_pnp(
 
     # Single tag only has 4 points; solvePnPRansac cannot reject outliers with so few points.
     # Use deterministic solvePnP instead.
+    # NOTE: SOLVEPNP_IPPE_SQUARE is designed for a C++ overload that returns two solutions via
+    # OutputArrayOfArrays.  The Python cv2.solvePnP binding only accepts a single rvec/tvec
+    # output and silently returns a near-zero tvec, causing projectPoints to produce thousands
+    # of pixels of reprojection error.  Use SOLVEPNP_IPPE instead: it is the general planar
+    # solver, works correctly with the single-solution Python binding, and is equally appropriate
+    # for a square tag (square is just a special case of a planar target).
     ok, rvec, tvec = cv2.solvePnP(
         object_pts,
         image_pts,
         K,
         dist,
-        flags=cv2.SOLVEPNP_IPPE_SQUARE,
+        flags=cv2.SOLVEPNP_IPPE,
     )
     if not ok:
         return PnPResult(False, None, 0, float("inf"), 4, reason="pnp_failed")
