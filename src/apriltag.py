@@ -172,30 +172,28 @@ def solve_single_tag_pnp(
     object_pts = build_tag_local_corners(tag_size_m)
     image_pts = np.asarray(corners_px, dtype=np.float32).reshape(4, 2)
 
-    ok, rvec, tvec, inliers = cv2.solvePnPRansac(
+    # Single tag only has 4 points; solvePnPRansac cannot reject outliers with so few points.
+    # Use deterministic solvePnP instead.
+    ok, rvec, tvec = cv2.solvePnP(
         object_pts,
         image_pts,
         K,
         dist,
-        flags=cv2.SOLVEPNP_ITERATIVE,
-        reprojectionError=float(reproj_error_px),
-        iterationsCount=int(pnp_iterations),
-        confidence=0.999,
+        flags=cv2.SOLVEPNP_IPPE_SQUARE,
     )
     if not ok:
         return PnPResult(False, None, 0, float("inf"), 4, reason="pnp_failed")
-
-    inlier_count = int(len(inliers)) if inliers is not None else 0
-    if inlier_count < int(min_inliers):
-        return PnPResult(False, None, inlier_count, float("inf"), 4, reason="few_inliers")
 
     proj, _ = cv2.projectPoints(object_pts, rvec, tvec, K, dist)
     reproj = np.linalg.norm(proj.reshape(-1, 2) - image_pts.reshape(-1, 2), axis=1)
     rmse = float(np.sqrt(np.mean(reproj * reproj)))
 
+    if rmse > float(reproj_error_px) * 2:
+        return PnPResult(False, None, 4, rmse, 4, reason="high_reproj_error")
+
     R = rodrigues_to_matrix(rvec)
     T_c_tag = make_transform(R, tvec.reshape(3))
-    return PnPResult(True, T_c_tag, inlier_count, rmse, 4, reason="")
+    return PnPResult(True, T_c_tag, 4, rmse, 4, reason="")
 
 
 def solve_camera_pose_from_tag_map(

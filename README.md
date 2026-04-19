@@ -1,6 +1,8 @@
 # cam_pose_via_checkboard
 
-使用多台固定相机(00~05)与棋盘格观测，估计目标相机07每一帧在 cam00 世界系下的 `T_w_c07`。
+使用多台**已标定固定相机**（默认 `00~05`）与 AprilTag 或棋盘格观测，估计**目标相机**（默认 `07`，支持头戴式相机）每一帧在世界坐标系下的位姿 `T_w_c07`。
+
+> **头戴式相机支持**：将头戴相机图像放在 `{dataset_root}/07/RGB/` 目录下，设置 `target_type: apriltag`，即可直接估计头戴相机每帧位姿，详见下方 [头戴式相机使用说明](#头戴式相机使用说明)。
 
 ## 输入约定
 
@@ -116,52 +118,94 @@ Common reasons for AprilTag mode:
 - `target_failed:few_tags`: target camera sees fewer tags than `apriltag_min_tags`.
 - `fixed_failed:opencv_has_no_aruco`: OpenCV build lacks `aruco` (install `opencv-contrib-python`).
 
-## AprilTag 使用说明（自动建图，无需预设世界坐标）
+## 头戴式相机使用说明
 
-当前已支持 `target_type: apriltag`。
-在该模式下，不需要手工预先填写每个 tag 的世界坐标与位姿。
-系统会在每一帧中基于固定相机自动估计可见 AprilTag 的世界位姿。
+本项目完整支持头戴式相机位姿估计，使用 `target_type: apriltag` 模式，无需预先标定 AprilTag 世界坐标。
 
-### 1）配置示例
+### 1）数据目录结构
 
-请在 `configs/default.yaml` 中设置：
-
-```yaml
-target_type: "apriltag"
-apriltag_family: "tag36h11"   # tag16h5 | tag25h9 | tag36h10 | tag36h11
-apriltag_default_size_m: 0.10   # 标签物理边长（米）
-apriltag_min_tags: 1
-apriltag_min_inliers: 4
+```
+dataset_root/
+├── camera_params.json        # 所有相机内参（含固定相机 + 头戴相机）
+├── extrinsics.json           # 固定相机外参（头戴相机不需要）
+├── 00/RGB/0000.jpg           # 固定相机 00 图像
+├── 01/RGB/0000.jpg
+├── ...
+├── 05/RGB/0000.jpg
+└── 07/RGB/0000.jpg           # 头戴相机图像（target_camera_id）
 ```
 
-说明：
+- 固定相机需要在 `extrinsics.json` 中提供外参（`rotation` + `translation`）。
+- 头戴相机（`07`）**不需要**外参，程序会自动估计其每帧位姿。
+- 图像文件名（帧索引）需要在固定相机和头戴相机之间对应一致。
 
-- `apriltag_default_size_m` 必须与实际打印标签尺寸一致，否则尺度会不准。
-- 当前实现默认所有 tag 尺寸一致。
+### 2）配置文件
 
-### 2）每帧处理流程
+编辑 `configs/default.yaml`：
+
+```yaml
+target_type: "apriltag"          # 使用 AprilTag 模式
+apriltag_family: "tag36h11"      # tag16h5 | tag25h9 | tag36h10 | tag36h11
+apriltag_default_size_m: 0.10    # 标签物理边长（米），必须与实际打印尺寸一致
+apriltag_min_tags: 1             # 每帧至少需要几个 tag 才能估计位姿
+apriltag_min_inliers: 4          # PnP 最少内点数
+
+fixed_camera_ids:
+  - "00"
+  - "01"
+  - "02"
+  - "03"
+  - "04"
+  - "05"
+target_camera_id: "07"           # 头戴相机 ID
+
+min_fixed_observations: 2        # 每帧至少需要几台固定相机看到 tag
+frame_policy: "intersection"     # intersection：只处理所有相机都有图像的帧
+                                 # target_primary：以头戴相机帧为主
+```
+
+> `apriltag_default_size_m` 必须与实际打印标签尺寸一致，否则估计的平移尺度会出错。
+
+### 3）每帧处理流程
 
 1. 对每台固定相机（`00~05`）检测当前帧可见的 AprilTag。
 2. 对每个检测到的 tag 做单 tag PnP，得到相机系下 `T_c_tag`。
-3. 结合固定相机外参，转换到世界系：`T_w_tag = T_w_c_fixed * T_c_tag`。
-4. 若同一 tag 被多台固定相机同时看到，对该 tag 的多个 `T_w_tag` 候选进行融合。
-5. 得到该帧的 world-tag map（本帧可用 tag 的世界坐标与位姿）。
-6. 对头戴相机（`07`）检测 AprilTag，并使用：
-   - 头戴相机图像上的 tag 角点（2D）
-   - 本帧 world-tag map 的对应 3D 角点
-   做联合 PnP。
-7. 对结果取逆，得到头戴相机在世界系下位姿 `T_w_c07`。
+3. 结合固定相机外参，转换到世界系：`T_w_tag = T_w_c_fixed × T_c_tag`。
+4. 若同一 tag 被多台固定相机同时看到，对多个 `T_w_tag` 候选进行 RANSAC 融合。
+5. 得到该帧的 world-tag map（本帧可用 tag 的世界 3D 角点）。
+6. 对头戴相机（`07`）检测 AprilTag，用 world-tag map 做联合 PnP。
+7. 对结果取逆，输出头戴相机在世界系下位姿 `T_w_c07`。
 
-### 3）运行命令
+### 4）运行命令
 
 ```bash
-python -m src.main --dataset_root <your_dataset_root> --config configs/default.yaml
+# 激活虚拟环境后
+python -m src.main --dataset_root /path/to/dataset_root --config configs/default.yaml
 ```
 
-### 4）diagnostics.csv 常见失败原因
+### 5）输出文件
 
-- `insufficient_fixed_observations`：可用固定相机数量不足。
-- `insufficient_world_tags`：固定相机融合后可用于建图的 tag 数不足。
-- `target_failed:tags_not_found`：头戴相机该帧未检测到 tag。
-- `target_failed:few_tags`：头戴相机该帧可用 tag 数小于 `apriltag_min_tags`。
-- `fixed_failed:opencv_has_no_aruco`：OpenCV 不含 `aruco` 模块（请安装 `opencv-contrib-python`）。
+输出到 `outputs/` 目录：
+
+| 文件 | 内容 |
+|------|------|
+| `trajectory_tw_c07.txt` | 每行：`帧索引 + 16个矩阵元素（按行展开）` |
+| `matrices/frame_*.txt` | 每帧 4×4 位姿矩阵 |
+| `diagnostics.csv` | 每帧质量信息与失败原因 |
+| `plots/*.png` | RMSE 曲线、可见相机数、轨迹俯视图 |
+
+### 6）diagnostics.csv 常见失败原因
+
+| 原因 | 说明 | 解决方法 |
+|------|------|----------|
+| `insufficient_fixed_observations` | 可用固定相机数量不足 | 降低 `min_fixed_observations`，或检查图像是否有 tag |
+| `insufficient_world_tags` | 固定相机融合后可用 tag 数不足 | 降低 `apriltag_min_tags`，或增大 tag 尺寸/数量 |
+| `target_failed:tags_not_found` | 头戴相机该帧未检测到 tag | 检查头戴相机视野是否覆盖 tag |
+| `target_failed:few_tags` | 头戴相机可用 tag 数不足 | 降低 `apriltag_min_tags` |
+| `fixed_failed:opencv_has_no_aruco` | OpenCV 缺少 aruco 模块 | 安装 `opencv-contrib-python` |
+
+### 7）常见问题
+
+- **位姿尺度异常**：检查 `apriltag_default_size_m` 是否与实际打印尺寸一致；检查外参 `translation` 单位，必要时启用 `use_mm_to_m_auto_scale: true`。
+- **姿态方向翻转**：尝试切换 `fixed_extrinsics_are_twc: false`（外参可能是 `T_c_w` 而非 `T_w_c`）。
+- **大量帧失败**：先用 `frame_policy: target_primary` 确认头戴相机帧是否都有对应固定相机帧；再检查 tag 是否在固定相机视野内。
