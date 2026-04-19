@@ -15,7 +15,7 @@ fixed_camera_ids:
   - "03"
   - "04"
   - "05"
-target_camera_id: "07"
+target_camera_id: "08
 
 frame_policy: "intersection"  # intersection | target_primary
 
