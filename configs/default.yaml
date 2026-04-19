@@ -6,7 +6,7 @@ square_size_m: 0.0255
 apriltag_family: "tag36h11"
 apriltag_min_tags: 1
 apriltag_min_inliers: 4
-apriltag_default_size_m: 0.10
+apriltag_default_size_m: 0.096
 
 fixed_camera_ids:
   - "00"

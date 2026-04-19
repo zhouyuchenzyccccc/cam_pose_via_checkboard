@@ -69,7 +69,9 @@ def run_pipeline(dataset_root: Path, cfg: RuntimeConfig, calibrations: Dict[str,
         )
 
     rows: List[dict] = []
-    for frame in frames:
+    for frame_idx, frame in enumerate(frames):
+        if frame_idx % 10 == 0:
+            logger.info("Processing frame %d / %d (%s)", frame_idx + 1, len(frames), frame)
         row = {
             "frame_index": frame,
             "success": False,
