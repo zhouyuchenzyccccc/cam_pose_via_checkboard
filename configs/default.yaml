@@ -1,4 +1,4 @@
-target_type: "chessboard"  # chessboard | apriltag
+target_type: "apriltag"  # chessboard | apriltag
 
 board_cols: 9
 board_rows: 6
@@ -15,7 +15,7 @@ fixed_camera_ids:
   - "03"
   - "04"
   - "05"
-target_camera_id: "08
+target_camera_id: "08"
 
 frame_policy: "intersection"  # intersection | target_primary
 
