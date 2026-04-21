@@ -209,3 +209,51 @@ python -m src.main --dataset_root /path/to/dataset_root --config configs/default
 - **位姿尺度异常**：检查 `apriltag_default_size_m` 是否与实际打印尺寸一致；检查外参 `translation` 单位，必要时启用 `use_mm_to_m_auto_scale: true`。
 - **姿态方向翻转**：尝试切换 `fixed_extrinsics_are_twc: false`（外参可能是 `T_c_w` 而非 `T_w_c`）。
 - **大量帧失败**：先用 `frame_policy: target_primary` 确认头戴相机帧是否都有对应固定相机帧；再检查 tag 是否在固定相机视野内。
+
+
+
+# 相机位姿平滑
+## 使用方法
+### 第一步：分析跳变分布，确定合适阈值
+```bash
+python scripts/smooth_poses.py --input outputs/trajectory_tw_c07.txt --analyze
+```
+
+**输出示例**：
+```
+=== XYZ 跳变分布（mm）  样本数: 386 ===
+  P50=2.3  P90=8.1  P95=12.4  P99=45.2  max=312.7
+  > 10mm:   38 帧 (9.84%)
+  > 30mm:    5 帧 (1.29%)
+  > 50mm:    2 帧 (0.52%)
+```
+根据分布选择`--jump_thresh_mm`参数值，通常取 **P95~P99** 之间的数值。
+
+### 第二步：执行平滑
+#### 方式1：输出到新文件（推荐）
+```bash
+python scripts/smooth_poses.py \
+    --input  outputs/trajectory_tw_c07.txt \
+    --output outputs/trajectory_tw_c07_smooth.txt \
+    --jump_thresh_mm 30 \
+    --rpy_jump_thresh_deg 20 \
+    --smooth_window 11
+```
+
+#### 方式2：覆盖原文件
+```bash
+python scripts/smooth_poses.py \
+    --input outputs/trajectory_tw_c07.txt \
+    --inplace \
+    --jump_thresh_mm 30
+```
+
+## 参数说明
+| 参数                  | 默认值              | 含义                                         |
+|-----------------------|---------------------|----------------------------------------------|
+| --jump_thresh_mm      | 50                  | 平移跳变阈值（mm），超过则插值替换           |
+| --rpy_jump_thresh_deg | 不启用              | 旋转跳变阈值（deg），不设则只跟随平移异常帧  |
+| --smooth_window       | 11                  | 平滑窗口大小（越大越平滑，需设置为奇数）     |
+| --smooth_method       | median_then_savgol  | 平滑方法，可选：savgol / median_then_savgol / none |
+| --context             | 1                   | 异常帧前后额外标记帧数                       |
+| --dry_run             | —                   | 只统计跳变信息，不写入文件                   |
