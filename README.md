@@ -181,6 +181,8 @@ frame_policy: "intersection"     # intersection：只处理所有相机都有图
 ```bash
 # 激活虚拟环境后
 python -m src.main --dataset_root /path/to/dataset_root --config configs/default.yaml
+
+python -m src.main --dataset_root /path/to/dataset_root --config configs/default.yaml --output_dir /path/to/data 
 ```
 
 ### 5）输出文件
